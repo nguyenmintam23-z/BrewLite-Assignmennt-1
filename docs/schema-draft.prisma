@@ -1,0 +1,187 @@
+// BrewLite A1 – Prisma schema NHÁP (Duy). Chưa đặt vào apps/api để tránh đụng Task 1 của Đại.
+// Nguồn: [Đề] mục 12.2 + Task 10; [A2] = CNPM apps/api/prisma/schema.prisma; [Đề xuất] = cần nhóm chốt.
+// Tiền lưu Int (VND) [Đề xuất]; A2 dùng Decimal(12,2) nhưng JSON trả chuỗi, FE cần số.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// [Đề] mục 9.1. A2: PENDING_PAYMENT/CONFIRMED -> đổi theo đề.
+enum OrderStatus {
+  PENDING
+  PAID
+  PAYMENT_FAILED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  WALLET
+  CARD
+}
+
+enum PaymentStatus {
+  SUCCEEDED
+  FAILED
+}
+
+enum SizeCode {
+  S
+  M
+  L
+}
+
+// [Đề] Product(id, name, price, imageUrl, stock)
+model Product {
+  id          String           @id @default(uuid()) @db.Uuid
+  name        String
+  description String           @default("")
+  price       Int
+  imageUrl    String?          @map("image_url")
+  isActive    Boolean          @default(true) @map("is_active")
+  stock       Int              @default(0)
+  version     Int              @default(0) // [Đề] Task 10.3: optimistic locking
+  sizes       ProductSize[]
+  toppings    ProductTopping[]
+  orderItems  OrderItem[]
+
+  @@map("products")
+}
+
+// [A2] bảng Size; thêm code S/M/L theo [Đề] Task 4.
+model Size {
+  id         String        @id @default(uuid()) @db.Uuid
+  code       SizeCode      @unique
+  extraPrice Int           @default(0) @map("extra_price")
+  products   ProductSize[]
+
+  @@map("sizes")
+}
+
+model Topping {
+  id         String             @id @default(uuid()) @db.Uuid
+  name       String
+  price      Int
+  isActive   Boolean            @default(true) @map("is_active")
+  products   ProductTopping[]
+  orderItems OrderItemTopping[]
+
+  @@map("toppings")
+}
+
+model ProductSize {
+  productId String  @map("product_id") @db.Uuid
+  sizeId    String  @map("size_id") @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  size      Size    @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+
+  @@id([productId, sizeId])
+  @@map("product_sizes")
+}
+
+model ProductTopping {
+  productId String  @map("product_id") @db.Uuid
+  toppingId String  @map("topping_id") @db.Uuid
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  topping   Topping @relation(fields: [toppingId], references: [id], onDelete: Restrict)
+
+  @@id([productId, toppingId])
+  @@map("product_toppings")
+}
+
+// [Đề] User(id, email, passwordHash, loyaltyPoints). Chủ: Tâm (Task 7).
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  loyaltyPoints Int      @default(0) @map("loyalty_points") // [Đề] Task 10.4, A2 chưa có
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  orders        Order[]
+
+  @@map("users")
+}
+
+// [Đề] Order(id, userId, status, total, createdAt)
+model Order {
+  id         String      @id @default(uuid()) @db.Uuid
+  code       String      @unique // mã hiển thị, ví dụ BL-1042 [Đề] mục 7 màn (5)
+  userId     String      @map("user_id") @db.Uuid
+  status     OrderStatus @default(PENDING)
+  subtotal   Int
+  discount   Int         @default(0)
+  total      Int
+  couponCode String?     @map("coupon_code") // Tâm, Task 10.4
+  createdAt  DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items      OrderItem[]
+  payments   Payment[]
+  coupon     Coupon?     @relation(fields: [couponCode], references: [code])
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("orders")
+}
+
+// [Đề] OrderItem(id, orderId, productId, size, qty, lineTotal). Lưu giá chụp lại lúc đặt.
+model OrderItem {
+  id        String             @id @default(uuid()) @db.Uuid
+  orderId   String             @map("order_id") @db.Uuid
+  productId String             @map("product_id") @db.Uuid
+  size      SizeCode
+  qty       Int
+  unitPrice Int                @map("unit_price")
+  lineTotal Int                @map("line_total")
+  order     Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product            @relation(fields: [productId], references: [id], onDelete: Restrict)
+  toppings  OrderItemTopping[]
+
+  @@map("order_items")
+}
+
+model OrderItemTopping {
+  orderItemId String    @map("order_item_id") @db.Uuid
+  toppingId   String    @map("topping_id") @db.Uuid
+  price       Int
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  topping     Topping   @relation(fields: [toppingId], references: [id], onDelete: Restrict)
+
+  @@id([orderItemId, toppingId])
+  @@map("order_item_toppings")
+}
+
+// [Đề] Payment(id, orderId, idempotencyKey, amount, method)
+// idempotencyKey unique toàn bảng -> gửi lại cùng key không tạo payment mới [Đề] Task 10 (b).
+model Payment {
+  id             String        @id @default(uuid()) @db.Uuid
+  orderId        String        @map("order_id") @db.Uuid
+  idempotencyKey String        @unique @map("idempotency_key")
+  requestHash    String        @map("request_hash") // [Đề xuất] phát hiện cùng key khác body -> 422
+  amount         Int
+  method         PaymentMethod
+  status         PaymentStatus
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+// [Đề] Task 10.4 khuyến mãi. Chủ: Tâm. Cấu trúc tối thiểu [Đề xuất].
+model Coupon {
+  code       String    @id
+  percentOff Int?      @map("percent_off")
+  amountOff  Int?      @map("amount_off")
+  isActive   Boolean   @default(true) @map("is_active")
+  expiresAt  DateTime? @map("expires_at") @db.Timestamptz(3)
+  orders     Order[]
+
+  @@map("coupons")
+}
