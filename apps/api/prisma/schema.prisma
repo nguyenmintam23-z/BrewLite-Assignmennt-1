@@ -1,0 +1,38 @@
+// BrewLite A1 – Prisma schema (Task 7: User + minimal Product/Order skeleton)
+// Nguồn: docs/schema-draft.prisma (Duy), api-contract.md (Duy), api-auth.md (A2 Tâm)
+// Tiền lưu Int (VND); User.loyaltyPoints chuẩn bị cho Task 10.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// [Đề] Product(id, name, price, imageUrl, stock)
+model Product {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String   @default("")
+  price       Int
+  imageUrl    String?  @map("image_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  stock       Int      @default(0)
+  version     Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("products")
+}
+
+// [Đề] User(id, email, passwordHash, loyaltyPoints). Chủ: Tâm (Task 7).
+model User {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique // normalized: trim + lowercase
+  passwordHash  String   @map("password_hash")
+  loyaltyPoints Int      @default(0) @map("loyalty_points") // Task 10.4, chỉ chuẩn bị ở Task 7
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("users")
+}

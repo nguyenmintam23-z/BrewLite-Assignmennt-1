@@ -16,9 +16,9 @@
 
 - JWT nằm trong **cookie HttpOnly** như A2. Frontend gọi qua proxy Next.js, proxy chuyển tiếp `Cookie`/`Set-Cookie`.
 - Guard của route cần đăng nhập đọc JWT **từ cookie** (không đọc `Authorization`).
-- **Tâm thông báo** cho Duy và Phúc: tên cookie, thời hạn JWT, cấu hình cookie khi chạy local (`Secure` tắt trên http), cách logout.
-  Đề xuất tên `brewlite_a1_access_token` để trùng tên proxy FE đang dùng **[Đề xuất]**.
-- Logout: frontend gọi `POST /auth/logout` của backend và xóa **đúng** cookie do backend đặt (lỗi đang có ở PR #1 của Phúc).
+- Đã chốt cho Task 7: cookie `brewlite_a1_access_token`, JWT sống **30 phút**, local HTTP dùng `Secure=false`, production luôn bật `Secure`, `SameSite=Lax`, `Path=/`.
+- Logout: frontend gọi `POST /auth/logout` qua proxy; backend trả `204` và xóa đúng cookie cùng `Path=/`.
+- `DATABASE_URL` và `JWT_SECRET` là biến bắt buộc; `JWT_SECRET` tối thiểu 32 byte. Frontend chỉ gọi qua proxy cùng origin, proxy kiểm tra `Origin` cho request thay đổi dữ liệu.
 
 ## 2. Endpoint
 
@@ -197,7 +197,7 @@ Theo [Đề] mục 9.1. Code: `apps/api/src/orders/order-state.ts`. `assertTrans
 
 ## 5. Còn chờ chốt
 
-1. **Tâm:** tên cookie, thời hạn JWT, cấu hình cookie local; công thức loyalty; xử lý tiền/điểm khi hủy đơn `PAID`; tên biến môi trường bật `simulateFailure`.
+1. **Tâm:** công thức loyalty; xử lý tiền/điểm khi hủy đơn `PAID`; tên biến môi trường bật `simulateFailure`.
 2. **Tâm + Duy:** thời gian chờ 15 phút; job hết hạn chạy bao lâu một lần.
-3. **Đại:** cổng backend, khung `apps/api`, Prisma + PostgreSQL.
-4. **Phúc** (PR #1, theo góp ý của Tâm): logout gọi backend và xóa đúng cookie; `createOrder()` gửi `couponCode`; `payOrder()` gửi `simulateFailure` khi bật mock; giữ nguyên body (cả `method`) khi gửi lại cùng key sau lỗi mạng; dùng đúng `order.total` server trả, kể cả `0`.
+3. **Task 7:** khung `apps/api`, Prisma + PostgreSQL và cổng 3001 đã được bổ sung.
+4. **Phúc** (PR #1, các phần ngoài Task 7): `createOrder()` gửi `couponCode`; `payOrder()` gửi `simulateFailure` khi bật mock; giữ nguyên body (cả `method`) khi gửi lại cùng key sau lỗi mạng; dùng đúng `order.total` server trả, kể cả `0`.

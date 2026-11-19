@@ -26,7 +26,12 @@ export interface CartItem {
   toppings: Topping[];
   quantity: number;
 }
-export interface User { email: string }
+export interface User {
+  id?: string;
+  email: string;
+  loyaltyPoints?: number;
+  createdAt?: string;
+}
 export interface Order {
   id: string;
   code: string;

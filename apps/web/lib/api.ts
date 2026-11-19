@@ -1,5 +1,5 @@
 "use client";
-import type { CartItem, Order, PaymentMethod, Product } from "./types";
+import type { CartItem, Order, PaymentMethod, Product, User } from "./types";
 import { demoProducts } from "./demo-data";
 import { demoCreateOrder, demoOrders, demoPay } from "./demo-store";
 import { normalizeOrder, normalizePaymentStatus, normalizeProduct, toBackendProductId, unwrapList } from "./normalize";
@@ -18,6 +18,13 @@ async function request(path: string, init: RequestInit = {}): Promise<unknown> {
   let data: unknown = null;
   try { data = bodyText ? JSON.parse(bodyText) : null; } catch { data = bodyText; }
   if (!response.ok) {
+    if (
+      response.status === 401 &&
+      !["/auth/login", "/auth/register", "/auth/logout"].includes(path) &&
+      typeof window !== "undefined"
+    ) {
+      window.dispatchEvent(new Event("brewlite:unauthorized"));
+    }
     const errorData = data && typeof data === "object" ? data as Record<string, unknown> : {};
     const raw = errorData.message;
     const message = Array.isArray(raw) ? raw.join("; ") : typeof raw === "string" ? raw : `Lỗi HTTP ${response.status}`;
@@ -27,6 +34,21 @@ async function request(path: string, init: RequestInit = {}): Promise<unknown> {
 }
 const json = (body: unknown) => ({method:"POST",body:JSON.stringify(body)});
 const fallbackAllowed = (e: unknown) => e instanceof ApiError && (e.status === 404 || e.status === 405);
+
+function authUser(raw: unknown): User {
+  const value = raw && typeof raw === "object" && "user" in raw
+    ? (raw as Record<string, unknown>).user
+    : raw;
+  if (!value || typeof value !== "object") throw new Error("Phản hồi xác thực không hợp lệ.");
+  const record=value as Record<string, unknown>;
+  if(typeof record.email!=="string"||!record.email)throw new Error("Phản hồi xác thực thiếu email.");
+  return {
+    ...(typeof record.id==="string"?{id:record.id}:{}),
+    email:record.email,
+    ...(typeof record.loyaltyPoints==="number"?{loyaltyPoints:record.loyaltyPoints}:{}),
+    ...(typeof record.createdAt==="string"?{createdAt:record.createdAt}:{}),
+  };
+}
 
 export async function getProducts(): Promise<Product[]> {
   if (DEMO_MODE) return demoProducts;
@@ -43,17 +65,21 @@ export async function getProduct(id: string): Promise<Product | null> {
     return (await getProducts()).find(p => p.id === id) ?? null;
   }
 }
-export async function register(email: string, password: string): Promise<void> {
-  if (DEMO_MODE) return; // Tâm phụ trách API đăng ký thật.
-  await request("/auth/register",json({email,password}));
+export async function register(email: string, password: string): Promise<User> {
+  if (DEMO_MODE) return {email};
+  return authUser(await request("/auth/register",json({email,password})));
 }
-export async function login(email: string, password: string): Promise<void> {
-  if (DEMO_MODE) return; // KHÔNG xác thực thật trong chế độ demo.
-  await request("/auth/login",json({email,password}));
+export async function login(email: string, password: string): Promise<User> {
+  if (DEMO_MODE) return {email};
+  return authUser(await request("/auth/login",json({email,password})));
+}
+export async function getCurrentUser(): Promise<User> {
+  if (DEMO_MODE) return {email:""};
+  return authUser(await request("/auth/me"));
 }
 export async function logout(): Promise<void> {
   if (DEMO_MODE) return;
-  await fetch("/api/session/logout", {method:"POST",credentials:"include"});
+  await request("/auth/logout",{method:"POST"});
 }
 export async function createOrder(items: CartItem[]): Promise<Order> {
   if (DEMO_MODE) return demoCreateOrder(items);
